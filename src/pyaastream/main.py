@@ -1,6 +1,8 @@
+import math
 import platform
 import re
 import shlex
+import shutil
 import subprocess
 import urllib.parse
 import urllib.request
@@ -9,12 +11,29 @@ from urllib.error import HTTPError, URLError
 
 from bs4 import BeautifulSoup as bs
 
+from pyaastream.terms import formats
+
 url = str
 html = str
 soup = bs
+LOADING = 0
+SEARCH = 1
+RESULTS = 2
+FILES = 3
+
 BASE = "https://nyaa.si"
 TEMPDIR = "webtorrent_tmp"
 PLAYER = "mpv"
+
+
+class Prompt:
+    query: str
+    torrents: list[str]
+    torrent: int
+    files: list[str]
+    show_all_files: bool = False
+    show_all_torrents: bool = False
+
 
 class Torrent(NamedTuple):
     link: str
@@ -26,8 +45,8 @@ class Torrent(NamedTuple):
 
 
 def construct_url() -> url:
-    query = input(f"Search {BASE}: ")
-    filters = {"f": 1, "c": "1_2", "s": "seeders", "o": "desc", "q": query}
+    Prompt.query = input(f"Search {BASE}: ")
+    filters = {"f": 1, "c": "1_2", "s": "seeders", "o": "desc", "q": Prompt.query}
     params = urllib.parse.urlencode(filters)
     return f"{BASE}?{params}"
 
@@ -45,6 +64,7 @@ def http_get(link: url) -> soup | None:
 
 
 def get_torrents(html: bs) -> list[Torrent]:
+    display(LOADING)
     if not html:
         print("Could not load page")
         exit()
@@ -63,14 +83,8 @@ def get_torrents(html: bs) -> list[Torrent]:
     return list(filter(lambda torrent: torrent.seeders > 0, torrents))
 
 
-def list_torrents(torrents: list[Torrent]) -> list[str]:
-    return [
-        f"{index:2}: {torrent.title}\n\tsize: {torrent.size}, date: {torrent.date}, seeders: {torrent.seeders}"
-        for index, torrent in enumerate(torrents)
-    ]
-
-
 def fetch_files(magnet: str) -> list[str]:
+    display(LOADING)
     output = (
         subprocess.run(
             shlex.split(f"webtorrent {magnet} -s -o {TEMPDIR}"), capture_output=True
@@ -78,61 +92,90 @@ def fetch_files(magnet: str) -> list[str]:
         .stdout.decode("utf-8")
         .splitlines()
     )
-    return list(filter(lambda line: re.match("^[0-9]+ ", line), output))
+    return [line for line in output if re.match("^[0-9]+ ", line)]
 
 
-def refresh() -> None:
-    subprocess.run("cls" if platform.system() == "Windows" else "clear")
-    print("Ctrl-C to exit")
+def clear():
+    subprocess.run(
+        "cls" if platform.system() == "Windows" else shlex.split("tput reset")
+    )
+
+
+def display(context: int) -> None:
+    clear()
+    term_size = shutil.get_terminal_size()
+    if context == SEARCH:
+        print("Ctrl-C to exit")
+    if context == LOADING:
+        pad = "\n" * (round(term_size.lines / 2))
+        print(f"{pad}{'Loading...'.center(term_size.columns)}{pad[:-1]}")
+    if context == RESULTS:
+        print(f"Search results for '{Prompt.query}':")
+        torrents = (
+            Prompt.torrents
+            if Prompt.show_all_torrents
+            else Prompt.torrents[: (math.floor(term_size.lines / 2) - 2)]
+        )
+        for index, torrent in enumerate(torrents):
+            print(f"{index:2}:  {torrent.title[:(term_size.columns-5)]}")
+            print(
+                f"\t\tsize: {torrent.size}, date: {torrent.date}, seeders: {torrent.seeders}"
+            )
+    if context == FILES:
+        files = (
+            Prompt.files
+            if Prompt.show_all_files
+            else [file for file in Prompt.files if any(fmt in file for fmt in formats)]
+        )
+        print(*files, sep="\n")
+        print(f"Page: {Prompt.torrents[int(Prompt.torrent)].link}")
 
 
 def cli() -> None:
     while True:
-        refresh()
-        torrents = get_torrents(http_get(construct_url()))
+        display(SEARCH)
+        Prompt.torrents = get_torrents(http_get(construct_url()))
         while True:
-            refresh()
-            print(*list_torrents(torrents), sep="\n")
-            menu1 = input("[b]ack or Choose torrent: ")
-            if menu1.isdigit() and int(menu1) in range(len(torrents)):
-                files = fetch_files(torrents[int(menu1)].magnet)
-            elif menu1 == "b":
+            display(RESULTS)
+            t_choice = input("[b]ack, [t]oggle show all, or Choose torrent: ")
+            if t_choice.isdigit() and int(t_choice) in range(len(Prompt.torrents)):
+                Prompt.torrent = int(t_choice)
+                Prompt.files = fetch_files(Prompt.torrents[Prompt.torrent].magnet)
+            elif t_choice == "b":
                 break
+            elif t_choice == "t":
+                Prompt.show_all_torrents = not Prompt.show_all_torrents
+                continue
             else:
                 continue
             while True:
-                refresh()
-                print(*files, sep="\n")
-                print(f"page: {torrents[int(menu1)].link}")
-                menu2 = input("[b]ack or Choose file: ")
-                if menu2.isdigit() and int(menu2) in range(len(files)):
+                display(FILES)
+                f_choice = input("[b]ack, [t]oggle show all, or Choose file: ")
+                if f_choice.isdigit() and int(f_choice) in range(len(Prompt.files)):
                     try:
                         subprocess.run(
                             shlex.split(
-                                f'webtorrent "{torrents[int(menu1)].magnet}" -s {menu2} --{PLAYER}'
+                                f'webtorrent "{Prompt.torrents[Prompt.torrent].magnet}" -s {f_choice} --{PLAYER}'
                             )
                         )
                     except KeyboardInterrupt:
                         print("Stopping stream")
-                elif menu2 == "b":
+                elif f_choice == "b":
                     break
+                elif f_choice == "t":
+                    Prompt.show_all_files = not Prompt.show_all_files
                 else:
                     continue
-
-
-def clean():
-    remove = "del" if platform.system() == "Windows" else "rm -rf"
-    subprocess.run(shlex.split(f"{remove} {TEMPDIR}"))
 
 
 def main():
     try:
         cli()
     except KeyboardInterrupt:
-        print("\nExiting...")
         exit()
     finally:
-        clean()
+        shutil.rmtree(TEMPDIR, ignore_errors=True)
+        clear()
 
 
 if __name__ == "__main__":
