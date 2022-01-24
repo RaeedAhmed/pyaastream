@@ -1,0 +1,1 @@
+formats = ['.mkv', '.mk3d', '.mp4', '.mov', '.qt', '.asf', '.wmv', '.avi', '.mxf', '.m2p', '.ps', '.ts', '.tsv', '.m2ts', '.mts', '.vob', '.evo', '.3gp', '.3g2', '.f4v', '.flv', '.ogv', '.ogx', '.Org', '.webm', '.rmvb', '.divx']
