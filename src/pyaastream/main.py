@@ -20,10 +20,13 @@ LOADING = 0
 SEARCH = 1
 RESULTS = 2
 FILES = 3
+DOS = platform.system() == "Windows"
 
 BASE = "https://nyaa.si"
+TEMPFILE = "tmp.torrent"
 TEMPDIR = "webtorrent_tmp"
-PLAYER = "mpv"
+
+PLAYER = "mpv" if shutil.which("mpv") else "vlc"
 
 
 class Prompt:
@@ -38,7 +41,7 @@ class Prompt:
 class Torrent(NamedTuple):
     link: str
     title: str
-    magnet: str
+    manifest: str
     size: str
     date: str
     seeders: int
@@ -73,7 +76,7 @@ def get_torrents(html: bs) -> list[Torrent]:
         Torrent(
             link=BASE + datum[1].select("a")[-1].get("href"),
             title=datum[1].select("a")[-1].text,
-            magnet=datum[2].select("a")[-1].get("href"),
+            manifest=BASE + datum[2].select("a")[0].get("href"),
             size=datum[3].text or "-",
             date=datum[4].text.split(" ")[0] or "-",
             seeders=int(datum[5].text),
@@ -83,11 +86,13 @@ def get_torrents(html: bs) -> list[Torrent]:
     return list(filter(lambda torrent: torrent.seeders > 0, torrents))
 
 
-def fetch_files(magnet: str) -> list[str]:
+def fetch_files(manifest: str) -> list[str]:
     display(LOADING)
+    urllib.request.urlretrieve(manifest, TEMPFILE)
     output = (
         subprocess.run(
-            shlex.split(f"webtorrent {magnet} -s -o {TEMPDIR}"), capture_output=True
+            shlex.split(f"webtorrent{'.cmd'*DOS} {TEMPFILE} -s -o {TEMPDIR}"),
+            capture_output=True,
         )
         .stdout.decode("utf-8")
         .splitlines()
@@ -97,7 +102,9 @@ def fetch_files(magnet: str) -> list[str]:
 
 def clear():
     subprocess.run(
-        "cls" if platform.system() == "Windows" else shlex.split("tput reset")
+        shlex.split("cmd /c cls")
+        if platform.system() == "Windows"
+        else shlex.split("tput reset")
     )
 
 
@@ -140,7 +147,7 @@ def cli() -> None:
             t_choice = input("[b]ack, [t]oggle show all, or Choose torrent: ")
             if t_choice.isdigit() and int(t_choice) in range(len(Prompt.torrents)):
                 Prompt.torrent = int(t_choice)
-                Prompt.files = fetch_files(Prompt.torrents[Prompt.torrent].magnet)
+                Prompt.files = fetch_files(Prompt.torrents[Prompt.torrent].manifest)
             elif t_choice == "b":
                 break
             elif t_choice == "t":
@@ -155,7 +162,7 @@ def cli() -> None:
                     try:
                         subprocess.run(
                             shlex.split(
-                                f'webtorrent "{Prompt.torrents[Prompt.torrent].magnet}" -s {f_choice} --{PLAYER}'
+                                f'webtorrent{".cmd"*DOS} {TEMPFILE} -s {f_choice} --{PLAYER}'
                             )
                         )
                     except KeyboardInterrupt:
@@ -175,6 +182,10 @@ def main():
         exit()
     finally:
         shutil.rmtree(TEMPDIR, ignore_errors=True)
+        try:
+            shutil.os.unlink(TEMPFILE)
+        except FileNotFoundError:
+            pass
         clear()
 
 
