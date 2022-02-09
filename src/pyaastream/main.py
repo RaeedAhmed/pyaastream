@@ -141,7 +141,10 @@ def display(context: int) -> None:
 def cli() -> None:
     while True:
         display(SEARCH)
-        Prompt.torrents = get_torrents(http_get(construct_url()))
+        try:
+            Prompt.torrents = get_torrents(http_get(construct_url()))
+        except AttributeError:
+            continue
         while True:
             display(RESULTS)
             t_choice = input("[b]ack, [t]oggle show all, or Choose torrent: ")
@@ -162,7 +165,7 @@ def cli() -> None:
                     try:
                         subprocess.run(
                             shlex.split(
-                                f'webtorrent{".cmd"*DOS} {TEMPFILE} -s {f_choice} --{PLAYER}'
+                                f'webtorrent{".cmd"*DOS} download {TEMPFILE} -o {TEMPDIR} -s {f_choice} --{PLAYER}'
                             )
                         )
                     except KeyboardInterrupt:
