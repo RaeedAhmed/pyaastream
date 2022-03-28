@@ -12,6 +12,7 @@ dynamic = ["version", "description"]
 dependencies = [
     "beautifulsoup4",
     "lxml",
+    "sty"
 ]
 
 [project.urls]
@@ -19,3 +20,4 @@ Home = "https://github.com/RaeedAhmed/pyaastream"
 
 [project.scripts]
 nyaa = "pyaastream.main:main"
+torr = "pyaastream.main:direct"
