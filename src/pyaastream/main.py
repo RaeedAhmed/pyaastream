@@ -219,11 +219,11 @@ def cli() -> None:
                     continue
 
 
-def stream(target, choice=""):
+def stream(target, choice=" "):
     try:
         subprocess.run(
             shlex.split(
-                f'webtorrent{".cmd"*DOS} {target} -o {TEMPDIR} --{PLAYER}'
+                f'webtorrent{".cmd"*DOS} {target} -o {TEMPDIR}{choice} --{PLAYER}'
             )
         )
     except KeyboardInterrupt:
@@ -231,7 +231,7 @@ def stream(target, choice=""):
 
 
 def stream_file(file_index):
-    return stream(target=TEMPFILE, choice=f"-s {file_index}")
+    return stream(target=TEMPFILE, choice=f" -s {file_index} ")
 
 
 def stream_uri(uri):
