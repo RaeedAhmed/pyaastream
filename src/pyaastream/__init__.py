@@ -1,2 +1,2 @@
 """Torrent/Magnet browser and handler script"""
-__version__ = "0.4"
+__version__ = "0.4.5"
