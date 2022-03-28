@@ -204,11 +204,14 @@ def cli() -> None:
                 continue
             while True:
                 display(FILES)
+                last_picked = f" ({Prompt.file_index})" if Prompt.file_index != -1 else ""
                 file_index = input(
-                    f"{key('back')}, {key('show all')}, or Choose file: ")
+                    f"{key('back')}, {key('show all')}, or Choose file{last_picked}: ")
                 if file_index.isdigit() and int(file_index) in range(len(Prompt.files)):
+                    Prompt.file_index = file_index
                     stream_file(file_index)
                 elif file_index == "b":
+                    Prompt.file_index = -1
                     break
                 elif file_index == "s":
                     Prompt.show_all_files = not Prompt.show_all_files
