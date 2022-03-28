@@ -5,7 +5,9 @@ CLI tool to search nyaa public tracker and launch video streams of files in torr
 
 ## Usage
 
-run `nyaa` to start the interface
+Run `nyaa` to start the interface
+
+Alternatively, run `torr` and enter a torrent file or magnet uri directly
 
 
 ## Installation
