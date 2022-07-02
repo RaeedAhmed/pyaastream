@@ -36,3 +36,8 @@ order = "desc"
 [playback]
 player = "mpv"
 player_args = "--hwdec=auto --fs --keep-open=yes --sub-auto=all"
+
+
+[history]
+record = true
+location = "default"

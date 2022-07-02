@@ -1,3 +1,4 @@
+import math
 import platform
 import re
 import shlex
@@ -23,28 +24,11 @@ TEMPDIR = Path.home() / "webtorrent_tmp"
 DOS = platform.system() == "Windows"
 
 # cli display codes
-ERROR = -1
 LOADING = 0
 SEARCH = 1
 RESULTS = 2
 FILES = 3
-
-
-def load_config() -> dict[str, dict[str, int | str]]:
-    config_file = Path(pyaastream.__path__[0]) / "config.toml"
-    try:
-        with open(config_file, "rb") as f:
-            config = tomli.load(f)
-    except tomli.TOMLDecodeError:
-        display(ERROR, "Invalid config file")
-    return config
-
-
-config = load_config()
-
-
-class InvalidURI(Exception):
-    pass
+HISTORY = 4
 
 
 class Torrent(NamedTuple):
@@ -66,6 +50,48 @@ class Prompt:
     file_index: int = -1
     show_all_files: bool = False
     show_all_torrents: bool = False
+
+
+def load_config() -> dict[str, dict[str, int | str]]:
+    default_path = Path(pyaastream.__path__[0]) / "config.toml"
+    if not DOS:
+        config_file = Path.home() / ".config" / "pyaastream" / "config.toml"
+        if not config_file.exists():
+            shutil.copy(default_path, config_file)
+    while True:
+        try:
+            with open(config_file, "rb") as f:
+                config = tomli.load(f)
+            break
+        except tomli.TOMLDecodeError:
+            return None
+    return config
+
+
+while True:
+    config = load_config()
+    if config is not None:
+        break
+    else:
+        input("Invalid config file.")
+
+if log := config['history']['location'] == "default":
+    if DOS:
+        log = Path(__file__).absolute().parent / "history.txt"
+    else:
+        cache_dir = Path(Path.home() / ".cache" / "pyaastream").mkdir(exist_ok=True, parents=True)
+        log = cache_dir / "history.txt"
+
+
+def write_history(torrent: Torrent, entry: str) -> None:
+    if config['history']['record']:
+        with open(log, "a") as file:
+            record = "||".join([torrent.title, torrent.manifest, entry])
+            file.write(record + "\n")
+
+
+class InvalidURI(Exception):
+    pass
 
 
 class Style:
@@ -152,6 +178,16 @@ def display(context: int, message=""):
     term_size = shutil.get_terminal_size()
     if context == SEARCH:
         print(Style.header("Ctrl-C to exit"))
+    elif context == RESULTS:
+        print(Style.header(f"Search results for '{Prompt.query}':"))
+        torrents = (
+            Prompt.torrents
+            if Prompt.show_all_torrents
+            else Prompt.torrents[: (math.floor(term_size.lines / 2) - 2)]
+        )
+        for index, torrent in enumerate(torrents):
+            print(f"{Style.key(str(index)):28}{Style.title(torrent.title, term_size.columns, offset=6)}")
+            print(Style.info(["size", "date", "seeders"], torrent))
     elif context == FILES:
         files = (
             Prompt.files
@@ -161,10 +197,8 @@ def display(context: int, message=""):
         for file in files:
             index, file_name = file.split(" ")[0], " ".join(file.split(" ")[1:])
             print(Style.key(index), Style.title(file_name, term_size.columns, offset=6))
-    elif context == RESULTS:
+    elif context == HISTORY:
         pass
-    elif context == ERROR:
-        print(message)
 
 
 def stream(target, file_choice=" ", subtitle="", streaming=True):
@@ -188,11 +222,25 @@ def stream_uri(uri, subtitle=""):
     return stream(target=f'"{uri}"', subtitle=subtitle)
 
 
+class Record(NamedTuple):
+    torrent_title: str
+    manifest: str
+    file_info: str
+
+
+def jump_to_history():
+    with open(log, "r") as file:
+        records = file.readlines()
+    history = [Record(record.split("||")) for record in records]
+    while True:
+        display(HISTORY)
+        selection = input("Select entry: ")
+
+
 def nyaa():
     BASE = "https://nyaa.si"
 
     def construct_url():
-        Prompt.query = input(f"Search nyaa.si: ")
         params = {k[0]: v for k, v in config["nyaa"].items()}
         params["q"] = Prompt.query
         return f"https://nyaa.si/?{urllib.parse.urlencode(params)}"
@@ -205,7 +253,7 @@ def nyaa():
     def get_torrents(html: bs):
         display(LOADING)
         if not html:
-            print("Could not loade page")
+            print("Could not load page")
             exit()
         data = [entry.find_all("td") for entry in html.tbody.find_all("tr")]
         torrents = [
@@ -224,13 +272,45 @@ def nyaa():
     def cli():
         while True:
             display(SEARCH)
-            try:
-                Prompt.torrents = get_torrents(http_get(request, construct_url()))
-            except AttributeError:
-                continue
+            Prompt.query = input(f"Search nyaa.si or {Style.key('history')}: ")
+            if Prompt.query in ["h", "history", "H"]:
+                Prompt.torrents = jump_to_history()
+                exit()
+            else:
+                try:
+                    Prompt.torrents = get_torrents(http_get(request, construct_url()))
+                except AttributeError:
+                    continue
             while True:
-                pass
-                
+                display(RESULTS)
+                torrent_index = input(
+                    f"{Style.key('back')}, {Style.key('show all')}, or Choose torrent: ")
+                if torrent_index.isdigit() and int(torrent_index) in range(len(Prompt.torrents)):
+                    Prompt.torrent = int(torrent_index)
+                    Prompt.files = fetch_files(Prompt.torrents[Prompt.torrent].manifest)
+                elif torrent_index == "b":
+                    break
+                elif torrent_index == "s":
+                    Prompt.show_all_torrents = not Prompt.show_all_torrents
+                    continue
+                else:
+                    continue
+                while True:
+                    display(FILES)
+                    last_picked = f" ({Prompt.file_index})" if Prompt.file_index != -1 else ""
+                    file_index = input(f"{Style.key('back')}, {Style.key('show all')}, or Choose file{last_picked}: ")
+                    if file_index.isdigit() and int(file_index) in range(len(Prompt.files)):
+                        Prompt.file_index = file_index
+                        write_history(Prompt.torrents[Prompt.torrent], Prompt.files[int(file_index)])
+                        stream_file(file_index)
+                    elif file_index == "b":
+                        Prompt.file_index = -1
+                        break
+                    elif file_index == "s":
+                        Prompt.show_all_files = not Prompt.show_all_files
+                    else:
+                        continue
+
     main(cli)
 
 
@@ -247,19 +327,12 @@ def torr():
             if Prompt.files:
                 while True:
                     display(FILES)
-                    last_picked = (
-                        f" ({Prompt.file_index})" if Prompt.file_index != -1 else ""
-                    )
+                    last_picked = (f" ({Prompt.file_index})" if Prompt.file_index != -1 else "")
                     file_index = input(
-                        f"{Style.key('back')}, {Style.key('show all')}, select {Style.key('all')}, or Choose file{last_picked}: "
-                    )
-                    if file_index.isdigit() and int(file_index) in range(
-                        len(Prompt.files)
-                    ):
+                        f"{Style.key('back')}, {Style.key('show all')}, select {Style.key('all')}, or Choose file{last_picked}: ")
+                    if file_index.isdigit() and int(file_index) in range(len(Prompt.files)):
                         Prompt.file_index = file_index
-                        streaming = any(
-                            fmt in Prompt.files[int(file_index)] for fmt in formats
-                        )
+                        streaming = any(fmt in Prompt.files[int(file_index)] for fmt in formats)
                         stream_file(file_index, manifest=link, streaming=streaming)
                     elif file_index == "b":
                         Prompt.file_index = -1
@@ -270,7 +343,6 @@ def torr():
                         stream_uri(link, f" --sub-file-paths={subtitle_paths()}")
                     else:
                         continue
-
     main(cli)
 
 
