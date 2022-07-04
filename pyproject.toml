@@ -20,5 +20,5 @@ dependencies = [
 Home = "https://github.com/RaeedAhmed/pyaastream"
 
 [project.scripts]
-nyaa = "pyaastream.temp:nyaa"
-torr = "pyaastream.temp:torr"
+nyaa = "pyaastream.main:nyaa"
+torr = "pyaastream.main:torr"
