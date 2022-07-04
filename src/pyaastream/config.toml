@@ -1,0 +1,43 @@
+[nyaa]
+# FILTER
+# 0 - no filter
+# 1 - no remakes
+# 2 - trusted only
+filter = 1
+
+# CATEGORY
+# 0_0 : All
+# 1_0 : Anime
+#   1_1 : Music Video
+#   1_2 : English-Translated
+#   1_3 : Non-English Translated
+#   1_4 : Raw
+# 2_0 : Audio
+#   2_1 : Lossless
+#   2_2 : Lossy
+# 4_0 : Live Action
+#   4_1 : English-Translated
+#   4_2 : Idol/Promo Video
+#   4_3 : Non-English Translated
+#   4_4 : Raw
+category = "1_2"
+
+# SORT
+# Choose from 'size', 'seeders', 'id' (date)
+# ... 'leechers', 'downloads'
+sort = "seeders"
+
+# ORDER
+# 'desc' or 'asc'
+order = "desc"
+
+
+
+[playback]
+player = "mpv"
+player_args = "--hwdec=auto --fs --keep-open=yes --sub-auto=all"
+
+
+[history]
+record = true
+location = "default"
