@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 from urllib.error import HTTPError, URLError
@@ -31,13 +31,14 @@ FILES = 3
 HISTORY = 4
 
 
-class Torrent(NamedTuple):
-    link: str
-    title: str
-    manifest: str
-    size: str
-    date: str
-    seeders: int
+@dataclass
+class Torrent():
+    link: str = field(default_factory=str)
+    title: str = field(default_factory=str)
+    manifest: str = field(default_factory=str)
+    size: str = field(default_factory=str)
+    date: str = field(default_factory=str)
+    seeders: int = -1
 
 
 @dataclass
@@ -57,7 +58,8 @@ def load_config() -> dict[str, dict[str, int | str]]:
     if not DOS:
         config_file = Path.home() / ".config" / "pyaastream" / "config.toml"
         if not config_file.exists():
-            shutil.copy(default_path, config_file)
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(default_path, config_file,)
     while True:
         try:
             with open(config_file, "rb") as f:
@@ -79,15 +81,18 @@ if log := config['history']['location'] == "default":
     if DOS:
         log = Path(__file__).absolute().parent / "history.txt"
     else:
-        cache_dir = Path(Path.home() / ".cache" / "pyaastream").mkdir(exist_ok=True, parents=True)
+        cache_dir = Path.home() / ".cache" / "pyaastream"
+        cache_dir.mkdir(exist_ok=True, parents=True)
         log = cache_dir / "history.txt"
+
+log.touch(exist_ok=True)
 
 
 def write_history(torrent: Torrent, entry: str) -> None:
     if config['history']['record']:
         with open(log, "a") as file:
             record = "||".join([torrent.title, torrent.manifest, entry])
-            file.write(record + "\n")
+            file.write(f"{record}\n")
 
 
 class InvalidURI(Exception):
@@ -197,8 +202,6 @@ def display(context: int, message=""):
         for file in files:
             index, file_name = file.split(" ")[0], " ".join(file.split(" ")[1:])
             print(Style.key(index), Style.title(file_name, term_size.columns, offset=6))
-    elif context == HISTORY:
-        pass
 
 
 def stream(target, file_choice=" ", subtitle="", streaming=True):
@@ -228,13 +231,45 @@ class Record(NamedTuple):
     file_info: str
 
 
+def display_history(history: list[Record]) -> None:
+    clear()
+    term_size = shutil.get_terminal_size()
+    print(Style.header("Watch History"))
+    for index, record in enumerate(history):
+        print(f"{Style.key(str(index)):28}{Style.title(record.torrent_title, term_size.columns, offset=6)}")
+        print(fg.da_grey + "\t" + record.file_info.split(" ", 1)[1] + rs.all)
+
+
 def jump_to_history():
     with open(log, "r") as file:
-        records = file.readlines()
-    history = [Record(record.split("||")) for record in records]
+        records = [record.strip() for record in file.readlines()]
+    if not records:
+        return
+    print(records)
+    input()
+    history = [Record(*record.split("||")) for record in records]
     while True:
-        display(HISTORY)
+        display_history(history)
         selection = input("Select entry: ")
+        if selection.isdigit() and int(selection) in range(len(history)):
+            record = history[int(selection)]
+            last_picked = record.file_info.split(" ")[0]
+            Prompt.files = fetch_files(record.manifest)
+        elif selection == "b":
+            break
+        else:
+            continue
+        while True:
+            display(FILES)
+            file_index = input(f"{Style.key('back')}, {Style.key('show all')}, or Choose file ({last_picked}): ")
+            if file_index.isdigit() and int(file_index) in range(len(Prompt.files)):
+                last_picked = file_index
+                write_history(Torrent(title=record.torrent_title, manifest=record.manifest), record.file_info)
+                stream_file(file_index)
+            elif file_index == "b":
+                break
+            elif file_index == "s":
+                Prompt.show_all_files = not Prompt.show_all_files
 
 
 def nyaa():
@@ -274,8 +309,8 @@ def nyaa():
             display(SEARCH)
             Prompt.query = input(f"Search nyaa.si or {Style.key('history')}: ")
             if Prompt.query in ["h", "history", "H"]:
-                Prompt.torrents = jump_to_history()
-                exit()
+                jump_to_history()
+                continue
             else:
                 try:
                     Prompt.torrents = get_torrents(http_get(request, construct_url()))
