@@ -245,8 +245,6 @@ def jump_to_history():
         records = [record.strip() for record in file.readlines()]
     if not records:
         return
-    print(records)
-    input()
     history = [Record(*record.split("||")) for record in records]
     while True:
         display_history(history)
