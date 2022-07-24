@@ -173,6 +173,7 @@ def fetch_files(link: str):
         .stdout.decode("utf-8")
         .splitlines()
     )
+    debug.append(output)
     return [line for line in output if re.match("^[0-9]+ ", line)]
 
 
@@ -329,6 +330,7 @@ def nyaa():
                 if torrent_index.isdigit() and int(torrent_index) in range(len(Prompt.torrents)):
                     Prompt.torrent = int(torrent_index)
                     Prompt.files = fetch_files(Prompt.torrents[Prompt.torrent].manifest)
+                    debug.append(Prompt.files)
                 elif torrent_index == "b":
                     break
                 elif torrent_index == "s":
