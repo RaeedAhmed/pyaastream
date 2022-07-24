@@ -60,6 +60,8 @@ def load_config() -> dict[str, dict[str, int | str]]:
         if not config_file.exists():
             config_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(default_path, config_file,)
+    else:
+        config_file = default_path
     while True:
         try:
             with open(config_file, "rb") as f:
@@ -246,8 +248,6 @@ def jump_to_history():
         records = [record.strip() for record in file.readlines()]
     if not records:
         return
-    print(records)
-    input()
     history = [Record(*record.split("||")) for record in records]
     while True:
         display_history(history)
