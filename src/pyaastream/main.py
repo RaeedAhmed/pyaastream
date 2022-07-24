@@ -150,6 +150,7 @@ def fetch_files(link: str):
             if not http_get(
                 lambda url: urllib.request.urlretrieve(url, TEMPFILE), link
             ):
+                print("Bad Request!\n")
                 return None
             command = f"webtorrent{'.cmd'*DOS} {TEMPFILE} -s -o {TEMPDIR}"
         elif link.startswith("magnet:"):
