@@ -53,6 +53,9 @@ class Prompt:
     show_all_torrents: bool = False
 
 
+debug: list[str] = []
+
+
 def load_config() -> dict[str, dict[str, int | str]]:
     default_path = Path(pyaastream.__path__[0]) / "config.toml"
     if not DOS:
@@ -152,7 +155,7 @@ def fetch_files(link: str):
             if not http_get(
                 lambda url: urllib.request.urlretrieve(url, TEMPFILE), link
             ):
-                print("Bad Request!\n")
+                debug.append("Bad Request!")
                 return None
             command = f"webtorrent{'.cmd'*DOS} {TEMPFILE} -s -o {TEMPDIR}"
         elif link.startswith("magnet:"):
@@ -181,9 +184,11 @@ def clear():
     )
 
 
-def display(context: int, message=""):
+def display(context: int):
     clear()
     term_size = shutil.get_terminal_size()
+    for message in debug:
+        print(message)
     if context == SEARCH:
         print(Style.header("Ctrl-C to exit"))
     elif context == RESULTS:
